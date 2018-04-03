@@ -154,8 +154,9 @@ func (this *jsonParser) ParseJSONArray() (*JSONArray, error) {
 
 	array := NewJsonArray()
 	for {
-		ch := this.currentChar()
+		this.skipWhiteSpace()
 
+		ch := this.currentChar()
 		switch ch {
 		case '{': {
 			obj, err := this.ParseJSONObject()
@@ -168,6 +169,11 @@ func (this *jsonParser) ParseJSONArray() (*JSONArray, error) {
 			this.next()
 			this.skipWhiteSpace()
 			continue
+		}
+		case ']': {
+			this.buf.Reset()
+			this.next()
+			return array, nil
 		}
 		}
 	}
