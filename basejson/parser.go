@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"bytes"
+	"strconv"
 )
 
 type Parser interface {
 	ParseJson()
 }
 
-type JsonParser struct {
+type jsonParser struct {
 	mtx sync.Mutex
 
 	pos int
@@ -26,8 +27,8 @@ type JsonParser struct {
 	json string
 }
 
-func NewJsonParser(str string) *JsonParser {
-	_parser := &JsonParser {
+func NewJsonParser(str string) *jsonParser {
+	_parser := &jsonParser {
 		pos: 0,
 		len: len(str),
 		json: str,
@@ -39,7 +40,7 @@ func NewJsonParser(str string) *JsonParser {
 	return _parser
 }
 
-func (this *JsonParser) ParseJSONObject() (*JSONObject, error) {
+func (this *jsonParser) ParseJSONObject() (*JSONObject, error) {
 	if this.currentChar() != '{' {
 		return nil, errors.New(fmt.Sprintf("except { at begin of object, pos: %d", this.pos))
 	}
@@ -108,29 +109,34 @@ func (this *JsonParser) ParseJSONObject() (*JSONObject, error) {
 
 		case DIGIT: {
 			this.scanNumberToken()
+			if this.np <= this.pos {
+				return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+			}
+
 			switch this.token {
 			case LITERAL_INT, LITERAL_LONG: {
-				value, err := this.readInt()
+				intValue, err := strconv.ParseInt(string(this.json[this.pos: this.np]), 10, 64)
 				if err != nil {
-					return nil, err
+					return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
 				}
-				objValue = value
+
+				objValue = intValue
 			}
-			case LITERAL_FLOAT : {
-				value, err := this.readFloat()
+			case LITERAL_FLOAT, LITERAL_DOUBLE: {
+				floatVal, err := strconv.ParseFloat(string(this.json[this.pos: this.np]), 64)
 				if err != nil {
-					return nil, err
+					return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
 				}
-				objValue = value
-			}
-			case LITERAL_DOUBLE: {
-				value, err := this.readDouble()
-				if err != nil {
-					return nil, err
-				}
-				objValue = value
+
+				objValue = floatVal
 			}
 			}
+
+			this.pos = this.np
+			if this.token == LITERAL_LONG {
+				this.pos ++
+			}
+			this.np = 0
 		}
 		} // end of switch
 		obj._inner_obj[objKey] = objValue
@@ -139,7 +145,7 @@ func (this *JsonParser) ParseJSONObject() (*JSONObject, error) {
 	return obj, nil
 }
 
-func (this *JsonParser) ParseJSONArray() (*JSONArray, error) {
+func (this *jsonParser) ParseJSONArray() (*JSONArray, error) {
 	this.skipWhiteSpace()
 	if this.currentChar() != '[' {
 		return nil, errors.New(fmt.Sprintf("except [ at the begin of array, pos: %d", this.pos))
@@ -170,7 +176,7 @@ func (this *JsonParser) ParseJSONArray() (*JSONArray, error) {
 }
 
 
-func (this *JsonParser) Parse() {
+func (this *jsonParser) Parse() {
 	if this.token == LBRACE {
 		obj , err := this.ParseJSONObject()
 		if err != nil {
@@ -188,7 +194,7 @@ func (this *JsonParser) Parse() {
 	}
 }
 
-func (this *JsonParser) scanNumberToken() {
+func (this *jsonParser) scanNumberToken() {
 	this.np = this.pos
 	this.token = LITERAL_INT
 
@@ -220,10 +226,6 @@ func (this *JsonParser) scanNumberToken() {
 	ch := this.getCharAt(this.np)
 	if ch == 'L' || ch == 'l' {
 		this.token = LITERAL_LONG
-		this.np ++
-	} else if ch == 'D' || ch == 'd' {
-		this.token = LITERAL_DOUBLE
-		this.np ++
 	} else if ch == 'E' || ch == 'e' {
 		this.np ++
 		ch = this.getCharAt(this.np)
@@ -238,27 +240,22 @@ func (this *JsonParser) scanNumberToken() {
 			}
 			this.np ++
 		}
-
-		if ch == 'D' || ch == 'd' {
-			this.token = LITERAL_DOUBLE
-			this.np ++
-		}
 	}
 }
 
-func (this *JsonParser) currentToken() int {
+func (this *jsonParser) currentToken() int {
 	tkn := byteToToken(this.currentChar())
 	this.token = tkn
 	return tkn
 }
 
-func (this *JsonParser) nextToken() int {
+func (this *jsonParser) nextToken() int {
 	tkn := byteToToken(this.next())
 	this.token = tkn
 	return tkn
 }
 
-func (this *JsonParser) readLiteral(literalValue []byte, literalType int) (int, error) {
+func (this *jsonParser) readLiteral(literalValue []byte, literalType int) (int, error) {
 	literalLen := len(literalValue)
 	if literalLen + this.pos >= len(this.json) {
 		return 0, errors.New("invalid json string")
@@ -272,7 +269,10 @@ func (this *JsonParser) readLiteral(literalValue []byte, literalType int) (int, 
 	return literalType, nil
 }
 
-func (this *JsonParser) readInt() (interface{}, error) {
+/**
+ * Deprecated. Using strconv.ParseInt instead
+ */
+func (this *jsonParser) readInt() (interface{}, error) {
 	value64 := uint64(0)
 
 	isNegitive := false
@@ -310,16 +310,16 @@ func (this *JsonParser) readInt() (interface{}, error) {
 	return returnValue, nil
 }
 
-func (this *JsonParser) readFloat() (float32, error) {
+func (this *jsonParser) readFloat() (float32, error) {
 
 	return 0, nil
 }
 
-func (this *JsonParser) readDouble() (float64, error) {
+func (this *jsonParser) readDouble() (float64, error) {
 	return 0, nil
 }
 
-func (this *JsonParser) readString() (string, error) {
+func (this *jsonParser) readString() (string, error) {
 	var ch byte
 	for {
 		ch = this.next()
@@ -347,27 +347,27 @@ func (this *JsonParser) readString() (string, error) {
 	return this.buf.String(), nil
 }
 
-func (this *JsonParser) putChar(ch byte) {
+func (this *jsonParser) putChar(ch byte) {
 	this.buf.WriteByte(ch)
 }
 
-func (this *JsonParser) next() byte {
+func (this *jsonParser) next() byte {
 	this.pos ++
 	return this.getCharAt(this.pos)
 }
 
-func (this *JsonParser) currentChar() byte {
+func (this *jsonParser) currentChar() byte {
 	return this.getCharAt(this.pos)
 }
 
-func (this *JsonParser) getCharAt(pos int) byte {
+func (this *jsonParser) getCharAt(pos int) byte {
 	if pos >= this.len {
 		return EOI
 	}
 	return this.json[pos]
 }
 
-func (this *JsonParser) isEOF() bool {
+func (this *jsonParser) isEOF() bool {
 	return this.pos == this.len || this.ch == EOI && this.pos + 1 == this.len
 }
 
@@ -375,7 +375,7 @@ func isWhiteSpace(ch byte) bool {
 	return  ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r'
 }
 
-func (this *JsonParser) skipWhiteSpace() {
+func (this *jsonParser) skipWhiteSpace() {
 	for {
 		if !isWhiteSpace(this.currentChar()) {
 			break
@@ -384,6 +384,6 @@ func (this *JsonParser) skipWhiteSpace() {
 	}
 }
 
-func (this *JsonParser) parseNull() {
+func (this *jsonParser) parseNull() {
 	this.token = NULL
 }
