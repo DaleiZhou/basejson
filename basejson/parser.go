@@ -52,7 +52,6 @@ func (this *jsonParser) ParseJSONObject() (*JSONObject, error) {
 
 		var objKey string
 		var objValue interface{}
-		fmt.Println("char: ", string(this.currentChar()), "token:", this.currentToken())
 
 		switch this.currentToken() {
 		case COMMA : {
@@ -155,25 +154,63 @@ func (this *jsonParser) ParseJSONArray() (*JSONArray, error) {
 	array := NewJsonArray()
 	for {
 		this.skipWhiteSpace()
-
-		ch := this.currentChar()
-		switch ch {
-		case '{': {
+		token := this.currentToken()
+		switch token {
+		case COMMA : {
+			this.next()
+			this.skipWhiteSpace()
+			continue
+		}
+		case LBRACE: {
 			obj, err := this.ParseJSONObject()
 			if err != nil {
 				return nil, err
 			}
 			array.Put(obj)
 		}
-		case ',': {
-			this.next()
-			this.skipWhiteSpace()
-			continue
-		}
-		case ']': {
+		case RBRACKET: {
 			this.buf.Reset()
 			this.next()
 			return array, nil
+		}
+		case DOUBLE_QUOTES: {
+			this.buf.Reset()
+			strValue, err := this.readString()
+			if err != nil {
+				return nil, err
+			}
+			array.Put(strValue)
+		}
+		case DIGIT: {
+			this.scanNumberToken()
+			if this.np <= this.pos {
+				return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+			}
+
+			switch this.token {
+			case LITERAL_INT, LITERAL_LONG: {
+				intValue, err := strconv.ParseInt(string(this.json[this.pos: this.np]), 10, 64)
+				if err != nil {
+					return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+				}
+
+				array.Put(intValue)
+			}
+			case LITERAL_FLOAT, LITERAL_DOUBLE: {
+				floatVal, err := strconv.ParseFloat(string(this.json[this.pos: this.np]), 64)
+				if err != nil {
+					return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+				}
+
+				array.Put(floatVal)
+			}
+			}
+
+			this.pos = this.np
+			if this.token == LITERAL_LONG {
+				this.next()
+			}
+			this.np = 0
 		}
 		}
 	}
@@ -275,47 +312,6 @@ func (this *jsonParser) readLiteral(literalValue []byte, literalType int) (int, 
 	return literalType, nil
 }
 
-/**
- * Deprecated. Using strconv.ParseInt instead
- */
-func (this *jsonParser) readInt() (interface{}, error) {
-	value64 := uint64(0)
-
-	isNegitive := false
-	if this.currentChar() == '-' {
-		isNegitive = true
-		this.next()
-	}
-
-	for {
-		ch := this.currentChar()
-		if ch < '0' || ch > '9' {
-			if ch == 'L' || ch == 'l' {
-				this.next()
-			}
-			break
-		}
-
-		digit := uint64(ch - '0')
-		value64 = value64 * 10 + digit
-		if (this.token == LITERAL_LONG && uint64(INT64_MAX) < value64) || (this.token == LITERAL_INT && uint64(INT32_MAX) < value64) {
-			return 0, errors.New(fmt.Sprintf("Parse value got error: overflows int32(int64), pos: %d", this.pos))
-		}
-
-		this.next()
-	}
-
-	returnValue := int64(value64)
-	if isNegitive {
-		returnValue = -1 * returnValue
-	}
-
-	if this.token == LITERAL_INT {
-		return int32(returnValue), nil
-	}
-	return returnValue, nil
-}
-
 func (this *jsonParser) readFloat() (float32, error) {
 
 	return 0, nil
@@ -392,4 +388,45 @@ func (this *jsonParser) skipWhiteSpace() {
 
 func (this *jsonParser) parseNull() {
 	this.token = NULL
+}
+
+/**
+ * Deprecated. Using strconv.ParseInt instead
+ */
+func (this *jsonParser) readInt() (interface{}, error) {
+	value64 := uint64(0)
+
+	isNegitive := false
+	if this.currentChar() == '-' {
+		isNegitive = true
+		this.next()
+	}
+
+	for {
+		ch := this.currentChar()
+		if ch < '0' || ch > '9' {
+			if ch == 'L' || ch == 'l' {
+				this.next()
+			}
+			break
+		}
+
+		digit := uint64(ch - '0')
+		value64 = value64 * 10 + digit
+		if (this.token == LITERAL_LONG && uint64(INT64_MAX) < value64) || (this.token == LITERAL_INT && uint64(INT32_MAX) < value64) {
+			return 0, errors.New(fmt.Sprintf("Parse value got error: overflows int32(int64), pos: %d", this.pos))
+		}
+
+		this.next()
+	}
+
+	returnValue := int64(value64)
+	if isNegitive {
+		returnValue = -1 * returnValue
+	}
+
+	if this.token == LITERAL_INT {
+		return int32(returnValue), nil
+	}
+	return returnValue, nil
 }
