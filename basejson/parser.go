@@ -44,21 +44,22 @@ func (this *JsonParser) ParseJSONObject() (*JSONObject, error) {
 		return nil, errors.New(fmt.Sprintf("except { at begin of object, pos: %d", this.pos))
 	}
 
-	this.next() // skip {
+	this.next() // skip begin '{'
 	obj := NewJSONObject()
 	for {
 		this.skipWhiteSpace()
-		ch := this.currentChar()
+
 		var objKey string
 		var objValue interface{}
+		fmt.Println("char: ", string(this.currentChar()), "token:", this.currentToken())
 
-		switch ch {
-		case ',': {
+		switch this.currentToken() {
+		case COMMA : {
 			this.next()
 			this.skipWhiteSpace()
 			continue
 		}
-		case '"': {
+		case DOUBLE_QUOTES: {
 			this.buf.Reset()
 			key, err := this.readString()
 			if err != nil {
@@ -66,28 +67,26 @@ func (this *JsonParser) ParseJSONObject() (*JSONObject, error) {
 			}
 
 			this.skipWhiteSpace()
-			if this.currentChar() != ':' {
+			if this.currentToken() != COLON {
 				return nil, errors.New(fmt.Sprintf("Expect : at %d, key = %s", &this.pos, key))
 			}
 			objKey = key
 		}
-		case '}': {
+		case RBRACE: {
 			this.buf.Reset()
 			this.next()
 			return obj, nil
 		}
 		default: {
-			return nil, errors.New(fmt.Sprintf("Expect : at %d, char, %s", this.pos, string(ch)))
+			return nil, errors.New(fmt.Sprintf("Error char: %s at pos: %d", string(this.currentChar()), this.pos))
 		}
 		}
 
 		this.next()
 		this.skipWhiteSpace()
-		ch = this.currentChar()
-		println(string(this.currentChar()))
 
-		switch ch {
-		case '"': {
+		switch this.currentToken() {
+		case DOUBLE_QUOTES: {
 			this.buf.Reset()
 			value, err := this.readString()
 			if err != nil {
@@ -96,19 +95,19 @@ func (this *JsonParser) ParseJSONObject() (*JSONObject, error) {
 			objValue = value
 		}
 
-		case '{': {
+		case LBRACE: {
 			value, err := this.ParseJSONObject()
 			if err != nil {
 				return nil, err
 			}
 			objValue = value
 		}
-		case '[': {
+		case LBRACKET: {
 			this.ParseJSONArray()
 		}
 
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-': {
-			this.parseNumber()
+		case DIGIT: {
+			this.scanNumberToken()
 			switch this.token {
 			case LITERAL_INT, LITERAL_LONG: {
 				value, err := this.readInt()
@@ -189,7 +188,7 @@ func (this *JsonParser) Parse() {
 	}
 }
 
-func (this *JsonParser) parseNumber() {
+func (this *JsonParser) scanNumberToken() {
 	this.np = this.pos
 	this.token = LITERAL_INT
 
@@ -273,38 +272,6 @@ func (this *JsonParser) readLiteral(literalValue []byte, literalType int) (int, 
 	return literalType, nil
 }
 
-func (this *JsonParser) readLong() (int64, error) {
-	value := int64(0)
-	isNegitive := false
-	if this.currentChar() == '-' {
-		isNegitive = true
-		this.next()
-	}
-
-	for {
-		ch := this.currentChar()
-		if ch == 'L' || ch == 'l' {
-			this.next()
-			break
-		} else if ch >= '0' && ch <= '9' {
-			digit := int64(ch - '0')
-			if INT64_MAX - digit < value {
-				return 0, errors.New(fmt.Sprintf("Can not parse as long value, pos: %d", this.pos))
-			}
-			value = value * 10 + digit
-		} else {
-			break
-		}
-		this.next()
-	}
-
-	if isNegitive {
-		value = -1 * value
-	}
-
-	return value, nil
-}
-
 func (this *JsonParser) readInt() (interface{}, error) {
 	value64 := uint64(0)
 
@@ -316,21 +283,19 @@ func (this *JsonParser) readInt() (interface{}, error) {
 
 	for {
 		ch := this.currentChar()
-		println(string(ch))
-
-		if ch == 'L' || ch == 'l' {
-			this.next()
-			break
-		} else if ch >= '0' && ch <= '9' {
-			digit := uint64(ch - '0')
-			value64 = value64 * 10 + digit
-			if (this.token == LITERAL_LONG && uint64(INT64_MAX) < value64) || (this.token == LITERAL_INT && uint64(INT32_MAX) < value64) {
-				return 0, errors.New(fmt.Sprintf("Parse value got error: overflows int32(int64), pos: %d", this.pos))
+		if ch < '0' || ch > '9' {
+			if ch == 'L' || ch == 'l' {
+				this.next()
 			}
-
-		} else {
 			break
 		}
+
+		digit := uint64(ch - '0')
+		value64 = value64 * 10 + digit
+		if (this.token == LITERAL_LONG && uint64(INT64_MAX) < value64) || (this.token == LITERAL_INT && uint64(INT32_MAX) < value64) {
+			return 0, errors.New(fmt.Sprintf("Parse value got error: overflows int32(int64), pos: %d", this.pos))
+		}
+
 		this.next()
 	}
 

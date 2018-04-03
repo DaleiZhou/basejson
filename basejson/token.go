@@ -88,7 +88,7 @@ var tokenMap = map[byte]int{
 	'7' :  DIGIT,
 	'8' :  DIGIT,
 	'9' :  DIGIT,
-	'-' :  NEGITIVE,
+	'-' :  DIGIT,
 	'"' :  DOUBLE_QUOTES,
 	'\'':  SIGNLE_QUOTES,
 	0x1A:  EOI,
