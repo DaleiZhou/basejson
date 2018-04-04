@@ -291,20 +291,55 @@ func (this *lexer) parseJSONArray() (*JSONArray, error) {
 	return array, nil
 }
 
-
-func (this *lexer) Parse() (interface{}, error) {
-	if this.token == LBRACE {
-		return this.ParseJSONObject()
-	} else if this.token == LBRACKET {
-		return this.ParseJSONArray()
-	}
-	this.skipWhiteSpace()
+func (this *lexer) Parse() (jsonValue, error) {
+	var value jsonValue
 	var err error
+	switch this.currentToken() {
+	case LBRACE : {
+		value, err = this.ParseJSONObject()
+	}
+	case LBRACKET: {
+		value, err =  this.ParseJSONArray()
+	}
+	case DOUBLE_QUOTES: {
+		this.buf.Reset()
+		str, err := this.readString()
+		if err == nil {
+			value = &literalString{
+				value: str,
+			}
+		}
+	}
+	case TRUE: {
+		err = this.readLiteral("true")
+		value = &literalBool{
+			value: true,
+		}
+	}
+	case FALSE: {
+		err = this.readLiteral("false")
+		value = &literalBool{
+			value: false,
+		}
+	}
+	case NULL :{
+		value, err = nil, this.readLiteral("null")
+		value = &literalNull{
+			value: nil,
+		}
+	}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	this.skipWhiteSpace()
 	if this.currentToken() != EOI {
 		err = errors.New(this.errorHint("Can not end json parse object process"))
 	}
 
-	return nil, err
+	return value, err
 }
 
 func (this *lexer) ParseJSONObject() (*JSONObject, error) {
