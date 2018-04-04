@@ -75,7 +75,7 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 
 			this.skipWhiteSpace()
 			if this.currentToken() != COLON {
-				return nil, errors.New(fmt.Sprintf("Expect : at %d, key = %s", &this.pos, key))
+				return nil, errors.New(fmt.Sprintf("Expect : at pos: %d, key = %s", this.pos, key))
 			}
 			objKey = key
 		}
@@ -85,7 +85,7 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 			return obj, nil
 		}
 		default: {
-			return nil, errors.New(fmt.Sprintf("Error char: %s at pos: %d", string(this.currentChar()), this.pos))
+			return nil, errors.New(fmt.Sprintf("Error char: %s at pos: %d, %s", string(this.currentChar()), this.pos, this.json[this.pos:]))
 		}
 		}
 
@@ -93,6 +93,27 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 		this.skipWhiteSpace()
 
 		switch this.currentToken() {
+		case TRUE:{
+			err := this.readLiteral("true")
+			if err != nil {
+				return nil, err
+			}
+			objValue = true
+		}
+		case FALSE: {
+			err := this.readLiteral("false")
+			if err != nil {
+				return nil, err
+			}
+			objValue = false
+		}
+		case NULL :{
+			err := this.readLiteral("null")
+			if err != nil {
+				return nil, err
+			}
+			objValue = nil
+		}
 		case DOUBLE_QUOTES: {
 			this.buf.Reset()
 			value, err := this.readString()
