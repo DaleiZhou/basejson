@@ -4,5 +4,5 @@
 * test case, benchmarks test
 * parse only number json value
 * encode/decode
-* parallel parser
+* api to get value by path
 * more
