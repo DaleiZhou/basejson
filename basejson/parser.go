@@ -47,9 +47,9 @@ func NewJsonParser(str string) *jsonParser {
 	return _parser
 }
 
-func (this *lexer) ParseJSONObject() (*JSONObject, error) {
+func (this *lexer) parseJSONObject() (*JSONObject, error) {
 	if this.currentChar() != '{' {
-		return nil, errors.New(fmt.Sprintf("except { at begin of object, pos: %d", this.pos))
+		return nil, errors.New(this.errorHint("except { at begin of object"))
 	}
 
 	this.next() // skip begin '{'
@@ -61,6 +61,11 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 		var objValue interface{}
 
 		switch this.currentToken() {
+		case EOI: {
+			if this.isEOF() {
+				return nil, errors.New(this.errorHint("Unclosed json object string"))
+			}
+		}
 		case COMMA : {
 			this.next()
 			this.skipWhiteSpace()
@@ -75,7 +80,7 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 
 			this.skipWhiteSpace()
 			if this.currentToken() != COLON {
-				return nil, errors.New(fmt.Sprintf("Expect : at pos: %d, key = %s", this.pos, key))
+				return nil, errors.New(this.errorHint("Expect char(:)"))
 			}
 			objKey = key
 		}
@@ -85,7 +90,7 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 			return obj, nil
 		}
 		default: {
-			return nil, errors.New(fmt.Sprintf("Error char: %s at pos: %d, %s", string(this.currentChar()), this.pos, this.json[this.pos:]))
+			return nil, errors.New(this.errorHint("Unknown char"))
 		}
 		}
 
@@ -124,14 +129,14 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 		}
 
 		case LBRACE: {
-			value, err := this.ParseJSONObject()
+			value, err := this.parseJSONObject()
 			if err != nil {
 				return nil, err
 			}
 			objValue = value
 		}
 		case LBRACKET: {
-			value, err := this.ParseJSONArray()
+			value, err := this.parseJSONArray()
 			if err != nil {
 				return nil, err
 			}
@@ -141,14 +146,14 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 		case DIGIT: {
 			this.scanNumberToken()
 			if this.np <= this.pos {
-				return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+				return nil, errors.New(this.errorHint("Scan number got error"))
 			}
 
 			switch this.token {
 			case LITERAL_INT, LITERAL_LONG: {
 				intValue, err := strconv.ParseInt(string(this.json[this.pos: this.np]), 10, 64)
 				if err != nil {
-					return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+					return nil, errors.New(this.errorHint("Parse Int number got error"))
 				}
 
 				objValue = intValue
@@ -156,7 +161,7 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 			case LITERAL_FLOAT, LITERAL_DOUBLE: {
 				floatVal, err := strconv.ParseFloat(string(this.json[this.pos: this.np]), 64)
 				if err != nil {
-					return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+					return nil, errors.New(this.errorHint("Parse Float number got error"))
 				}
 
 				objValue = floatVal
@@ -176,10 +181,10 @@ func (this *lexer) ParseJSONObject() (*JSONObject, error) {
 	return obj, nil
 }
 
-func (this *lexer) ParseJSONArray() (*JSONArray, error) {
+func (this *lexer) parseJSONArray() (*JSONArray, error) {
 	this.skipWhiteSpace()
 	if this.currentChar() != '[' {
-		return nil, errors.New(fmt.Sprintf("except [ at the begin of array, pos: %d", this.pos))
+		return nil, errors.New(this.errorHint("except [ at the begin of array"))
 	}
 	this.next() //skip begin [
 
@@ -188,7 +193,12 @@ func (this *lexer) ParseJSONArray() (*JSONArray, error) {
 		this.skipWhiteSpace()
 		token := this.currentToken()
 		switch token {
-		case TRUE:{
+		case EOI: {
+			if this.isEOF() {
+				return nil, errors.New(this.errorHint("Unclosed json string"))
+			}
+		}
+		case TRUE: {
 			err := this.readLiteral("true")
 			if err != nil {
 				return nil, err
@@ -210,7 +220,7 @@ func (this *lexer) ParseJSONArray() (*JSONArray, error) {
 			array.Put(nil)
 		}
 		case LBRACKET: {
-			obj, err := this.ParseJSONArray()
+			obj, err := this.parseJSONArray()
 			if err != nil {
 				return nil, err
 			}
@@ -222,7 +232,7 @@ func (this *lexer) ParseJSONArray() (*JSONArray, error) {
 			continue
 		}
 		case LBRACE: {
-			obj, err := this.ParseJSONObject()
+			obj, err := this.parseJSONObject()
 			if err != nil {
 				return nil, err
 			}
@@ -244,14 +254,14 @@ func (this *lexer) ParseJSONArray() (*JSONArray, error) {
 		case DIGIT: {
 			this.scanNumberToken()
 			if this.np <= this.pos {
-				return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+				return nil, errors.New(this.errorHint("Scan number got error"))
 			}
 
 			switch this.token {
 			case LITERAL_INT, LITERAL_LONG: {
 				intValue, err := strconv.ParseInt(string(this.json[this.pos: this.np]), 10, 64)
 				if err != nil {
-					return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+					return nil, errors.New(this.errorHint("Parse Int number got error"))
 				}
 
 				array.Put(intValue)
@@ -259,7 +269,7 @@ func (this *lexer) ParseJSONArray() (*JSONArray, error) {
 			case LITERAL_FLOAT, LITERAL_DOUBLE: {
 				floatVal, err := strconv.ParseFloat(string(this.json[this.pos: this.np]), 64)
 				if err != nil {
-					return nil, errors.New(fmt.Sprintf("parse number got error, pos: %d", this.pos))
+					return nil, errors.New(this.errorHint("Parse Float number got error"))
 				}
 
 				array.Put(floatVal)
@@ -272,6 +282,9 @@ func (this *lexer) ParseJSONArray() (*JSONArray, error) {
 			}
 			this.np = 0
 		}
+		default: {
+			return nil, errors.New(this.errorHint("Unknown char"))
+		}
 		}
 	}
 
@@ -279,22 +292,45 @@ func (this *lexer) ParseJSONArray() (*JSONArray, error) {
 }
 
 
-func (this *lexer) Parse() {
+func (this *lexer) Parse() (interface{}, error) {
 	if this.token == LBRACE {
-		obj , err := this.ParseJSONObject()
-		if err != nil {
-			fmt.Println(err.Error())
-		} else if str, err := obj.MarshalJSON(); err == nil {
-			fmt.Println(string(str))
-		}
+		return this.ParseJSONObject()
 	} else if this.token == LBRACKET {
-		arr, err := this.ParseJSONArray()
-		if err != nil {
-			fmt.Println(err.Error())
-		} else if str, err := arr.MarshalJSON(); err == nil {
-			fmt.Println(string(str))
-		}
+		return this.ParseJSONArray()
 	}
+	this.skipWhiteSpace()
+	var err error
+	if this.currentToken() != EOI {
+		err = errors.New(this.errorHint("Can not end json parse object process"))
+	}
+
+	return nil, err
+}
+
+func (this *lexer) ParseJSONObject() (*JSONObject, error) {
+	obj, err := this.parseJSONObject()
+	if err != nil {
+		return obj, err
+	}
+
+	this.skipWhiteSpace()
+	if this.currentToken() != EOI {
+		err = errors.New(this.errorHint("Can not end json parse object process"))
+	}
+	return obj, err
+}
+
+func (this *lexer) ParseJSONArray() (*JSONArray, error) {
+	obj, err := this.parseJSONArray()
+	if err != nil {
+		return obj, err
+	}
+
+	this.skipWhiteSpace()
+	if this.currentToken() != EOI {
+		err = errors.New(this.errorHint("Can not end json parse array process"))
+	}
+	return obj, err
 }
 
 func (this *lexer) scanNumberToken() {
@@ -363,7 +399,7 @@ func (this *lexer) readLiteral(literalValue string) error {
 	for idx := 0; idx < literalLen; idx++ {
 		ch := this.currentChar()
 		if ch != literalValue[idx] {
-			return errors.New(fmt.Sprintf("expect literal value: %s, at pos: %d", string(literalValue), this.pos))
+			return errors.New(this.errorHint(fmt.Sprintf("expect literal value: %s", string(literalValue))))
 		}
 		this.next()
 	}
@@ -383,7 +419,7 @@ func (this *lexer) readString() (string, error) {
 				this.putChar(EOI)
 				continue
 			}
-			return "", errors.New(fmt.Sprintf("unclosed string : %c", ch))
+			return "", errors.New(this.errorHint("Unclosed string"))
 		}
 
 		if ch == '\\' {
@@ -426,6 +462,13 @@ func isWhiteSpace(ch byte) bool {
 	return  ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r'
 }
 
+func (this *lexer) errorHint(message string) string {
+	beginPos := Max(this.pos - 10, 0)
+	endPos := Min(this.pos + 10, this.len)
+
+	return fmt.Sprintf("%s, hint info: position: %d, and text around %s", message, this.pos, this.json[beginPos: endPos])
+}
+
 func (this *lexer) skipWhiteSpace() {
 	for {
 		if !isWhiteSpace(this.currentChar()) {
@@ -433,8 +476,4 @@ func (this *lexer) skipWhiteSpace() {
 		}
 		this.next()
 	}
-}
-
-func (this *lexer) parseNull() {
-	this.token = NULL
 }
