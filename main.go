@@ -11,7 +11,10 @@ func main(){
 	//str3 := "[{\"key\"    : 123123L, , , , \"key1\"    : \"value2\", \"key2\" : { \"inner_key1\" : \"inner_value1\"  } }, {\"key\"    : \"value\", , , , \"key1\"    : \"value2\", \"key2\" : { \"inner_key1\" : \"inner_value1\"  } }]"
 
 	//str4 := "[    \"123123\"   ,    \"sdfsdf123123\"    , \"ge34g34g\"    ]"
-	str5 := "[    123123   ,    2.342342e34    , 234234234    ]"
-	parser := basejson.NewJsonParser(str5)
+	//str5 := "[    123123   ,    2.342342e34    , 234234234    ]"
+	//str6 := "[[[\"test\"], [ \"test2\", \"test3\" ]]]"
+
+	str7 := "[ true, false, null]"
+	parser := basejson.NewJsonParser(str7)
 	parser.Parse()
 }
